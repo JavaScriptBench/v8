@@ -327,7 +327,7 @@ Expression* MakeCall(IdentifierExpression* callee,
   // All IdentifierExpressions are treated as label names and can be directly
   // used as labels identifiers. All other statements in a call's otherwise
   // must create intermediate Labels for the otherwise's statement code.
-  size_t label_id = 0;
+  size_t label_id_count = 0;
   std::vector<TryHandler*> temp_labels;
   for (auto* statement : otherwise) {
     if (auto* e = ExpressionStatement::DynamicCast(statement)) {
@@ -339,7 +339,7 @@ Expression* MakeCall(IdentifierExpression* callee,
         continue;
       }
     }
-    auto label_name = std::string("__label") + std::to_string(label_id++);
+    auto label_name = std::string("__label") + std::to_string(label_id_count++);
     auto label_id = MakeNode<Identifier>(label_name);
     label_id->pos = SourcePosition::Invalid();
     labels.push_back(label_id);
@@ -728,7 +728,7 @@ base::Optional<ParseResult> MakeAbstractTypeDeclaration(
         constexpr_name, flags | AbstractTypeFlag::kConstexpr, constexpr_extends,
         constexpr_generates);
     constexpr_decl->pos = name->pos;
-    Declaration* decl = constexpr_decl;
+    decl = constexpr_decl;
     if (!generic_parameters.empty()) {
       decl =
           MakeNode<GenericTypeDeclaration>(generic_parameters, constexpr_decl);
@@ -889,7 +889,7 @@ base::Optional<ParseResult> MakeClassDeclaration(
       child_results,
       {ANNOTATION_GENERATE_PRINT, ANNOTATION_NO_VERIFIER, ANNOTATION_ABSTRACT,
        ANNOTATION_HAS_SAME_INSTANCE_TYPE_AS_PARENT,
-       ANNOTATION_GENERATE_CPP_CLASS, ANNOTATION_CUSTOM_CPP_CLASS,
+       ANNOTATION_DO_NOT_GENERATE_CPP_CLASS, ANNOTATION_CUSTOM_CPP_CLASS,
        ANNOTATION_CUSTOM_MAP, ANNOTATION_GENERATE_BODY_DESCRIPTOR,
        ANNOTATION_EXPORT, ANNOTATION_DO_NOT_GENERATE_CAST,
        ANNOTATION_HIGHEST_INSTANCE_TYPE_WITHIN_PARENT,
@@ -907,9 +907,8 @@ base::Optional<ParseResult> MakeClassDeclaration(
   if (annotations.Contains(ANNOTATION_HAS_SAME_INSTANCE_TYPE_AS_PARENT)) {
     flags |= ClassFlag::kHasSameInstanceTypeAsParent;
   }
-  if (annotations.Contains(ANNOTATION_GENERATE_CPP_CLASS)) {
-    flags |= ClassFlag::kGenerateCppClassDefinitions;
-  }
+  bool do_not_generate_cpp_class =
+      annotations.Contains(ANNOTATION_DO_NOT_GENERATE_CPP_CLASS);
   if (annotations.Contains(ANNOTATION_CUSTOM_CPP_CLASS)) {
     flags |= ClassFlag::kCustomCppClass;
   }
@@ -962,6 +961,14 @@ base::Optional<ParseResult> MakeClassDeclaration(
     fields_raw = (*body)->fields;
   } else {
     flags |= ClassFlag::kUndefinedLayout;
+  }
+
+  if (is_extern && body.has_value()) {
+    if (!do_not_generate_cpp_class) {
+      flags |= ClassFlag::kGenerateCppClassDefinitions;
+    }
+  } else if (do_not_generate_cpp_class) {
+    Lint("Annotation @doNotGenerateCppClass has no effect");
   }
 
   // Filter to only include fields that should be present based on decoration.
@@ -1491,7 +1498,7 @@ base::Optional<ParseResult> MakeTypeswitchStatement(
     ParseResultIterator* child_results) {
   auto expression = child_results->NextAs<Expression*>();
   auto cases = child_results->NextAs<std::vector<TypeswitchCase>>();
-  CurrentSourcePosition::Scope current_source_position(
+  CurrentSourcePosition::Scope matched_input_current_source_position(
       child_results->matched_input().pos);
 
   // typeswitch (expression) case (x1 : T1) {

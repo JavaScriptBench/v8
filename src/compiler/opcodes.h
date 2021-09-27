@@ -83,6 +83,7 @@
   V(Unreachable)          \
   V(DeadValue)            \
   V(Dead)                 \
+  V(Plug)                 \
   V(StaticAssert)
 
 // Opcodes for JavaScript operators.
@@ -462,7 +463,6 @@
   V(PlainPrimitiveToFloat64)            \
   V(PlainPrimitiveToNumber)             \
   V(PlainPrimitiveToWord32)             \
-  V(PoisonIndex)                        \
   V(RestLength)                         \
   V(RuntimeAbort)                       \
   V(StoreDataViewElement)               \
@@ -685,7 +685,6 @@
   V(DebugBreak)                          \
   V(Comment)                             \
   V(Load)                                \
-  V(PoisonedLoad)                        \
   V(LoadImmutable)                       \
   V(Store)                               \
   V(StackSlot)                           \
@@ -745,9 +744,6 @@
   V(Word64Select)                        \
   V(Float32Select)                       \
   V(Float64Select)                       \
-  V(TaggedPoisonOnSpeculation)           \
-  V(Word32PoisonOnSpeculation)           \
-  V(Word64PoisonOnSpeculation)           \
   V(LoadStackCheckOffset)                \
   V(LoadFramePointer)                    \
   V(LoadParentFramePointer)              \

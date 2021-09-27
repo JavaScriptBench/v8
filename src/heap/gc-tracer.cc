@@ -69,9 +69,8 @@ CollectionEpoch GCTracer::CurrentEpoch(Scope::ScopeId scope_id) {
 GCTracer::Scope::Scope(GCTracer* tracer, ScopeId scope, ThreadKind thread_kind)
     : tracer_(tracer), scope_(scope), thread_kind_(thread_kind) {
   start_time_ = tracer_->MonotonicallyIncreasingTimeInMs();
-  if (V8_LIKELY(!TracingFlags::is_runtime_stats_enabled())) return;
-
 #ifdef V8_RUNTIME_CALL_STATS
+  if (V8_LIKELY(!TracingFlags::is_runtime_stats_enabled())) return;
   if (thread_kind_ == ThreadKind::kMain) {
     DCHECK_EQ(tracer_->heap_->isolate()->thread_id(), ThreadId::Current());
     runtime_stats_ =
@@ -258,14 +257,14 @@ void GCTracer::Start(GarbageCollector collector,
   previous_ = current_;
 
   switch (collector) {
-    case SCAVENGER:
+    case GarbageCollector::SCAVENGER:
       current_ = Event(Event::SCAVENGER, gc_reason, collector_reason);
       break;
-    case MINOR_MARK_COMPACTOR:
+    case GarbageCollector::MINOR_MARK_COMPACTOR:
       current_ =
           Event(Event::MINOR_MARK_COMPACTOR, gc_reason, collector_reason);
       break;
-    case MARK_COMPACTOR:
+    case GarbageCollector::MARK_COMPACTOR:
       if (heap_->incremental_marking()->WasActivated()) {
         current_ = Event(Event::INCREMENTAL_MARK_COMPACTOR, gc_reason,
                          collector_reason);
@@ -345,10 +344,11 @@ void GCTracer::Stop(GarbageCollector collector) {
   }
 
   DCHECK_LE(0, start_counter_);
-  DCHECK((collector == SCAVENGER && current_.type == Event::SCAVENGER) ||
-         (collector == MINOR_MARK_COMPACTOR &&
+  DCHECK((collector == GarbageCollector::SCAVENGER &&
+          current_.type == Event::SCAVENGER) ||
+         (collector == GarbageCollector::MINOR_MARK_COMPACTOR &&
           current_.type == Event::MINOR_MARK_COMPACTOR) ||
-         (collector == MARK_COMPACTOR &&
+         (collector == GarbageCollector::MARK_COMPACTOR &&
           (current_.type == Event::MARK_COMPACTOR ||
            current_.type == Event::INCREMENTAL_MARK_COMPACTOR)));
 

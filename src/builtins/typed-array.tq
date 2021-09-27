@@ -56,6 +56,8 @@ extern runtime TypedArrayCopyElements(
     Context, JSTypedArray, Object, Number): void;
 extern macro TypedArrayBuiltinsAssembler::ValidateTypedArray(
     Context, JSAny, constexpr string): JSTypedArray;
+extern macro TypedArrayBuiltinsAssembler::ValidateTypedArrayAndGetLength(
+    Context, JSAny, constexpr string): uintptr;
 
 extern macro TypedArrayBuiltinsAssembler::CallCMemcpy(
     RawPtr, RawPtr, uintptr): void;
@@ -64,6 +66,8 @@ extern macro TypedArrayBuiltinsAssembler::CallCMemmove(
 extern macro TypedArrayBuiltinsAssembler::CallCMemset(
     RawPtr, intptr, uintptr): void;
 extern macro TypedArrayBuiltinsAssembler::CallCRelaxedMemcpy(
+    RawPtr, RawPtr, uintptr): void;
+extern macro TypedArrayBuiltinsAssembler::CallCRelaxedMemmove(
     RawPtr, RawPtr, uintptr): void;
 extern macro GetTypedArrayBuffer(implicit context: Context)(JSTypedArray):
     JSArrayBuffer;
@@ -81,6 +85,9 @@ extern macro TypedArrayBuiltinsAssembler::StoreJSTypedArrayElementFromNumeric(
     Context, JSTypedArray, uintptr, Numeric, constexpr ElementsKind);
 extern macro TypedArrayBuiltinsAssembler::StoreJSTypedArrayElementFromTagged(
     Context, JSTypedArray, uintptr, JSAny, constexpr ElementsKind)
+    labels IfDetached;
+
+extern macro LoadJSTypedArrayLengthAndCheckDetached(JSTypedArray): uintptr
     labels IfDetached;
 
 type LoadNumericFn = builtin(JSTypedArray, uintptr) => Numeric;
@@ -159,22 +166,23 @@ macro GetTypedArrayAccessor(elementsKind: ElementsKind): TypedArrayAccessor {
   unreachable;
 }
 
-extern macro
-TypedArrayBuiltinsAssembler::AllocateJSTypedArrayExternalPointerEntry(
-    JSTypedArray): void;
-
 extern macro TypedArrayBuiltinsAssembler::SetJSTypedArrayOnHeapDataPtr(
     JSTypedArray, ByteArray, uintptr): void;
 extern macro TypedArrayBuiltinsAssembler::SetJSTypedArrayOffHeapDataPtr(
     JSTypedArray, RawPtr, uintptr): void;
+extern macro IsJSTypedArrayDetachedOrOutOfBounds(JSTypedArray):
+    never labels Detached, NotDetached;
 
 // AttachedJSTypedArray guards that the array's buffer is not detached.
 transient type AttachedJSTypedArray extends JSTypedArray;
 
 macro EnsureAttached(array: JSTypedArray): AttachedJSTypedArray
     labels Detached {
-  if (IsDetachedBuffer(array.buffer)) goto Detached;
-  return %RawDownCast<AttachedJSTypedArray>(array);
+  try {
+    IsJSTypedArrayDetachedOrOutOfBounds(array) otherwise Detached, NotDetached;
+  } label NotDetached {
+    return %RawDownCast<AttachedJSTypedArray>(array);
+  }
 }
 
 struct AttachedJSTypedArrayWitness {

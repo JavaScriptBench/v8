@@ -70,7 +70,9 @@ static void CheckMigrationTarget(Isolate* isolate, Map old_map, Map new_map) {
                    .GetMigrationTarget();
   if (target.is_null()) return;
   CHECK_EQ(new_map, target);
-  CHECK_EQ(Map::TryUpdateSlow(isolate, old_map), target);
+  CHECK_EQ(MapUpdater::TryUpdateNoLock(isolate, old_map,
+                                       ConcurrencyMode::kNotConcurrent),
+           target);
 }
 
 class Expectations {
@@ -783,9 +785,9 @@ void TestGeneralizeField(const CRFTData& from, const CRFTData& to,
     // Check the cases when the map being reconfigured is NOT a part of the
     // transition tree. "None -> anything" representation changes make sense
     // only for "attached" maps.
-    int indices[] = {0, kPropCount - 1};
-    for (int i = 0; i < static_cast<int>(arraysize(indices)); i++) {
-      TestGeneralizeField(indices[i], 2, from, to, expected, expected_alert);
+    int indices2[] = {0, kPropCount - 1};
+    for (int i = 0; i < static_cast<int>(arraysize(indices2)); i++) {
+      TestGeneralizeField(indices2[i], 2, from, to, expected, expected_alert);
     }
 
     // Check that reconfiguration to the very same field works correctly.
@@ -1831,8 +1833,8 @@ static void TestReconfigureElementsKind_GeneralizeFieldInPlace(
   {
     MapHandles map_list;
     map_list.push_back(updated_map);
-    Map transitioned_map =
-        map2->FindElementsKindTransitionedMap(isolate, map_list);
+    Map transitioned_map = map2->FindElementsKindTransitionedMap(
+        isolate, map_list, ConcurrencyMode::kNotConcurrent);
     CHECK_EQ(*updated_map, transitioned_map);
   }
 }
@@ -2194,8 +2196,8 @@ static void TestGeneralizeFieldWithSpecialTransition(
         if (config->is_non_equivalent_transition()) {
           // In case of non-equivalent transition currently we generalize all
           // representations.
-          for (int i = 0; i < kPropCount; i++) {
-            expectations2.GeneralizeField(i);
+          for (int j = 0; j < kPropCount; j++) {
+            expectations2.GeneralizeField(j);
           }
           CHECK(new_map2->GetBackPointer().IsUndefined(isolate));
           CHECK(expectations2.Check(*new_map2));

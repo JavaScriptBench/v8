@@ -365,6 +365,7 @@ void PagedSpace::DecreaseLimit(Address new_limit) {
       optional_scope.emplace(chunk);
     }
 
+    ConcurrentAllocationMutex guard(this);
     SetTopAndLimit(top(), new_limit);
     Free(new_limit, old_limit - new_limit,
          SpaceAccountingMode::kSpaceAccounted);
@@ -416,6 +417,15 @@ size_t PagedSpace::Available() {
   return free_list_->Available();
 }
 
+namespace {
+
+UnprotectMemoryOrigin GetUnprotectMemoryOrigin(bool is_compaction_space) {
+  return is_compaction_space ? UnprotectMemoryOrigin::kMaybeOffMainThread
+                             : UnprotectMemoryOrigin::kMainThread;
+}
+
+}  // namespace
+
 void PagedSpace::FreeLinearAllocationArea() {
   // Mark the old linear allocation area with a free space map so it can be
   // skipped when scanning the heap.
@@ -441,7 +451,8 @@ void PagedSpace::FreeLinearAllocationArea() {
   // because we are going to write a filler into that memory area below.
   if (identity() == CODE_SPACE) {
     heap()->UnprotectAndRegisterMemoryChunk(
-        MemoryChunk::FromAddress(current_top));
+        MemoryChunk::FromAddress(current_top),
+        GetUnprotectMemoryOrigin(is_compaction_space()));
   }
 
   DCHECK_IMPLIES(current_limit - current_top >= 2 * kTaggedSize,
@@ -488,11 +499,11 @@ void PagedSpace::SetReadAndExecutable() {
   }
 }
 
-void PagedSpace::SetReadAndWritable() {
+void PagedSpace::SetCodeModificationPermissions() {
   DCHECK(identity() == CODE_SPACE);
   for (Page* page : *this) {
     CHECK(heap()->memory_allocator()->IsMemoryChunkExecutable(page));
-    page->SetReadAndWritable();
+    page->SetCodeModificationPermissions();
   }
 }
 
@@ -543,7 +554,8 @@ bool PagedSpace::TryAllocationFromFreeListMain(size_t size_in_bytes,
   DCHECK_LE(size_in_bytes, limit - start);
   if (limit != end) {
     if (identity() == CODE_SPACE) {
-      heap()->UnprotectAndRegisterMemoryChunk(page);
+      heap()->UnprotectAndRegisterMemoryChunk(
+          page, GetUnprotectMemoryOrigin(is_compaction_space()));
     }
     Free(limit, end - limit, SpaceAccountingMode::kSpaceAccounted);
   }
@@ -559,8 +571,9 @@ base::Optional<std::pair<Address, size_t>> PagedSpace::RawRefillLabBackground(
   DCHECK(identity() == OLD_SPACE || identity() == MAP_SPACE);
   DCHECK_EQ(origin, AllocationOrigin::kRuntime);
 
-  auto result = TryAllocationFromFreeListBackground(
-      local_heap, min_size_in_bytes, max_size_in_bytes, alignment, origin);
+  base::Optional<std::pair<Address, size_t>> result =
+      TryAllocationFromFreeListBackground(local_heap, min_size_in_bytes,
+                                          max_size_in_bytes, alignment, origin);
   if (result) return result;
 
   MarkCompactCollector* collector = heap()->mark_compact_collector();
@@ -571,7 +584,7 @@ base::Optional<std::pair<Address, size_t>> PagedSpace::RawRefillLabBackground(
     RefillFreeList();
 
     // Retry the free list allocation.
-    auto result = TryAllocationFromFreeListBackground(
+    result = TryAllocationFromFreeListBackground(
         local_heap, min_size_in_bytes, max_size_in_bytes, alignment, origin);
     if (result) return result;
 
@@ -589,7 +602,7 @@ base::Optional<std::pair<Address, size_t>> PagedSpace::RawRefillLabBackground(
     RefillFreeList();
 
     if (static_cast<size_t>(max_freed) >= min_size_in_bytes) {
-      auto result = TryAllocationFromFreeListBackground(
+      result = TryAllocationFromFreeListBackground(
           local_heap, min_size_in_bytes, max_size_in_bytes, alignment, origin);
       if (result) return result;
     }
@@ -597,7 +610,7 @@ base::Optional<std::pair<Address, size_t>> PagedSpace::RawRefillLabBackground(
 
   if (heap()->ShouldExpandOldGenerationOnSlowAllocation(local_heap) &&
       heap()->CanExpandOldGenerationBackground(local_heap, AreaSize())) {
-    auto result = ExpandBackground(local_heap, max_size_in_bytes);
+    result = ExpandBackground(local_heap, max_size_in_bytes);
     if (result) {
       DCHECK_EQ(Heap::GetFillToAlign(result->first, alignment), 0);
       return result;
@@ -718,8 +731,9 @@ void PagedSpace::Verify(Isolate* isolate, ObjectVisitor* visitor) {
 
       if (object.IsExternalString()) {
         ExternalString external_string = ExternalString::cast(object);
-        size_t size = external_string.ExternalPayloadSize();
-        external_page_bytes[ExternalBackingStoreType::kExternalString] += size;
+        size_t payload_size = external_string.ExternalPayloadSize();
+        external_page_bytes[ExternalBackingStoreType::kExternalString] +=
+            payload_size;
       }
     }
     for (int i = 0; i < kNumTypes; i++) {

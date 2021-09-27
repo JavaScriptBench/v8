@@ -293,11 +293,11 @@ VisitResult ImplementationVisitor::InlineMacro(
                            true);
   }
 
-  size_t i = 0;
+  size_t count = 0;
   for (auto arg : arguments) {
-    if (this_reference && i == signature.implicit_count) i++;
-    const bool mark_as_used = signature.implicit_count > i;
-    const Identifier* name = macro->parameter_names()[i++];
+    if (this_reference && count == signature.implicit_count) count++;
+    const bool mark_as_used = signature.implicit_count > count;
+    const Identifier* name = macro->parameter_names()[count++];
     parameter_bindings.Add(name,
                            LocalValue{LocationReference::Temporary(
                                arg, "parameter " + name->value)},
@@ -475,9 +475,9 @@ void ImplementationVisitor::VisitMacroCommon(Macro* macro) {
     const LabelDeclaration& label_info = signature.labels[i];
     assembler().Bind(label_block);
     std::vector<std::string> label_parameter_variables;
-    for (size_t i = 0; i < label_info.types.size(); ++i) {
-      LowerLabelParameter(label_info.types[i],
-                          ExternalLabelParameterName(label_info.name->value, i),
+    for (size_t j = 0; j < label_info.types.size(); ++j) {
+      LowerLabelParameter(label_info.types[j],
+                          ExternalLabelParameterName(label_info.name->value, j),
                           &label_parameter_variables);
     }
     assembler().Emit(GotoExternalInstruction{
@@ -579,7 +579,7 @@ void ImplementationVisitor::Visit(Builtin* builtin) {
             .Position(signature.parameter_names[signature.implicit_count]->pos);
       }
 
-      csa_ccfile() << "   TNode<Word32T> argc = UncheckedParameter<Word32T>("
+      csa_ccfile() << "  TNode<Word32T> argc = UncheckedParameter<Word32T>("
                    << "Descriptor::kJSActualArgumentsCount);\n";
       csa_ccfile() << "  TNode<IntPtrT> "
                       "arguments_length(ChangeInt32ToIntPtr(UncheckedCast<"
@@ -588,13 +588,17 @@ void ImplementationVisitor::Visit(Builtin* builtin) {
                       "UncheckedCast<RawPtrT>(LoadFramePointer());\n";
       csa_ccfile() << "  TorqueStructArguments "
                       "torque_arguments(GetFrameArguments(arguments_frame, "
-                      "arguments_length));\n";
+                      "arguments_length, (kJSArgcIncludesReceiver ? "
+                      "FrameArgumentsArgcType::kCountIncludesReceiver : "
+                      "FrameArgumentsArgcType::kCountExcludesReceiver)"
+                   << "));\n";
       csa_ccfile()
           << "  CodeStubArguments arguments(this, torque_arguments);\n";
 
       parameters.Push("torque_arguments.frame");
       parameters.Push("torque_arguments.base");
       parameters.Push("torque_arguments.length");
+      parameters.Push("torque_arguments.actual_count");
       const Type* arguments_type = TypeOracle::GetArgumentsType();
       StackRange range = parameter_types.PushMany(LowerType(arguments_type));
       parameter_bindings.Add(*signature.arguments_variable,
@@ -625,7 +629,7 @@ void ImplementationVisitor::Visit(Builtin* builtin) {
                     ? "arguments.GetReceiver()"
                     : "UncheckedParameter<Object>(Descriptor::kReceiver)")
             << ";\n";
-        csa_ccfile() << "USE(" << generated_name << ");\n";
+        csa_ccfile() << "  USE(" << generated_name << ");\n";
         expected_types = {TypeOracle::GetJSAnyType()};
       } else if (param_name == "newTarget") {
         csa_ccfile() << "  TNode<Object> " << generated_name
@@ -737,12 +741,12 @@ const Type* ImplementationVisitor::Visit(
       ReportError("constexpr variables need an initializer");
     }
     TypeVector lowered_types = LowerType(*type);
-    for (const Type* type : lowered_types) {
+    for (const Type* t : lowered_types) {
       assembler().Emit(PushUninitializedInstruction{TypeOracle::GetTopType(
           "uninitialized variable '" + stmt->name->value + "' of type " +
-              type->ToString() + " originally defined at " +
+              t->ToString() + " originally defined at " +
               PositionAsString(stmt->pos),
-          type)});
+          t)});
     }
     init_result =
         VisitResult(*type, assembler().TopRange(lowered_types.size()));
@@ -1907,9 +1911,9 @@ void FailCallableLookup(
     stream << "\nfailed to instantiate all of these generic declarations:";
     for (auto& failure : inapplicable_generics) {
       GenericCallable* generic = failure.first;
-      const std::string& reason = failure.second;
+      const std::string& fail_reason = failure.second;
       stream << "\n  " << generic->name() << " defined at "
-             << generic->Position() << ":\n    " << reason << "\n";
+             << generic->Position() << ":\n    " << fail_reason << "\n";
     }
   }
   ReportError(stream.str());
@@ -3016,10 +3020,10 @@ VisitResult ImplementationVisitor::GenerateCall(
           arguments_to_getter.parameters.begin(),
           converted_arguments.begin() + 1, converted_arguments.end());
 
-      Callable* callable = LookupCallable(
+      Callable* callable_macro = LookupCallable(
           qualified_getter_name, Declarations::Lookup(qualified_getter_name),
           arguments_to_getter, {});
-      Macro* getter = Macro::DynamicCast(callable);
+      Macro* getter = Macro::DynamicCast(callable_macro);
       if (!getter || getter->IsMethod()) {
         ReportError(
             "%MakeLazy expects a macro, not builtin or other type of callable");
@@ -3046,10 +3050,10 @@ VisitResult ImplementationVisitor::GenerateCall(
       StackRange argument_range_for_getter = assembler().TopRange(0);
       std::vector<std::string> constexpr_arguments_for_getter;
 
-      size_t current = 0;
+      size_t arg_count = 0;
       for (auto arg : arguments_to_getter.parameters) {
-        DCHECK_LT(current, getter->signature().types().size());
-        const Type* to_type = getter->signature().types()[current++];
+        DCHECK_LT(arg_count, getter->signature().types().size());
+        const Type* to_type = getter->signature().types()[arg_count++];
         AddCallParameter(getter, arg, to_type, &converted_arguments_for_getter,
                          &argument_range_for_getter,
                          &constexpr_arguments_for_getter,
@@ -3521,7 +3525,8 @@ void ImplementationVisitor::GenerateBuiltinDefinitionsAndInterfaceDescriptors(
           // count.
           int parameter_count =
               static_cast<int>(builtin->signature().ExplicitCount());
-          builtin_definitions << ", " << parameter_count;
+          builtin_definitions << ", JSParameterCount(" << parameter_count
+                              << ")";
           // And the receiver is explicitly declared.
           builtin_definitions << ", kReceiver";
           for (size_t i = builtin->signature().implicit_count;
@@ -3721,6 +3726,7 @@ class MacroFieldOffsetsGenerator : public FieldOffsetsGenerator {
          << "_FIELDS(V) \\\n";
   }
   void WriteField(const Field& f, const std::string& size_string) override {
+    out_ << "/* " << PositionAsString(f.pos) << " */ \\\n";
     out_ << "V(k" << CamelifyString(f.name_and_type.name) << "Offset, "
          << size_string << ") \\\n";
   }
@@ -3855,13 +3861,17 @@ namespace {
 class ClassFieldOffsetGenerator : public FieldOffsetsGenerator {
  public:
   ClassFieldOffsetGenerator(std::ostream& header, std::ostream& inline_header,
-                            const ClassType* type, std::string gen_name)
+                            const ClassType* type, std::string gen_name,
+                            const ClassType* parent)
       : FieldOffsetsGenerator(type),
         hdr_(header),
         inl_(inline_header),
-        previous_field_end_("P::kHeaderSize"),
+        previous_field_end_((parent && parent->IsShape()) ? "P::kSize"
+                                                          : "P::kHeaderSize"),
         gen_name_(gen_name) {}
+
   void WriteField(const Field& f, const std::string& size_string) override {
+    hdr_ << "  // " << PositionAsString(f.pos) << "\n";
     std::string field = "k" + CamelifyString(f.name_and_type.name) + "Offset";
     std::string field_end = field + "End";
     hdr_ << "  static constexpr int " << field << " = " << previous_field_end_
@@ -3870,6 +3880,7 @@ class ClassFieldOffsetGenerator : public FieldOffsetsGenerator {
          << size_string << " - 1;\n";
     previous_field_end_ = field_end + " + 1";
   }
+
   void WriteFieldOffsetGetter(const Field& f) override {
     // A static constexpr int is more convenient than a getter if the offset is
     // known.
@@ -3922,6 +3933,8 @@ class CppClassGenerator {
   void GenerateClass();
 
  private:
+  SourcePosition Position();
+
   void GenerateClassConstructors();
 
   // Generates getter and setter runtime member functions for the given class
@@ -3981,7 +3994,7 @@ base::Optional<std::vector<Field>> GetOrderedUniqueIndexFields(
 
 void CppClassGenerator::GenerateClass() {
   // Is<name>_NonInline(HeapObject)
-  {
+  if (!type_->IsShape()) {
     cpp::Function f("Is"s + name_ + "_NonInline");
     f.SetDescription("Alias for HeapObject::Is"s + name_ +
                      "() that avoids inlining.");
@@ -3994,7 +4007,7 @@ void CppClassGenerator::GenerateClass() {
       stream << "  return o.Is" << name_ << "();";
     });
   }
-
+  hdr_ << "// Definition" << PositionAsString(Position()) << "\n";
   hdr_ << template_decl() << "\n";
   hdr_ << "class " << gen_name_ << " : public P {\n";
   hdr_ << "  static_assert(std::is_same<" << name_ << ", D>::value,\n"
@@ -4009,6 +4022,7 @@ void CppClassGenerator::GenerateClass() {
     hdr_ << " protected: // not extern or @export\n";
   }
   for (const Field& f : type_->fields()) {
+    CurrentSourcePosition::Scope scope(f.pos);
     std::vector<const Field*> struct_fields;
     GenerateFieldAccessors(f, struct_fields);
   }
@@ -4046,7 +4060,8 @@ void CppClassGenerator::GenerateClass() {
   }
 
   hdr_ << "\n";
-  ClassFieldOffsetGenerator g(hdr_, inl_, type_, gen_name_);
+  ClassFieldOffsetGenerator g(hdr_, inl_, type_, gen_name_,
+                              type_->GetSuperClass());
   for (auto f : type_->fields()) {
     CurrentSourcePosition::Scope scope(f.pos);
     g.RecordOffsetFor(f);
@@ -4112,10 +4127,10 @@ void CppClassGenerator::GenerateClass() {
 
     // V8_INLINE int32_t AllocatedSize() const
     {
-      cpp::Function f =
+      cpp::Function allocated_size_f =
           cpp::Function::DefaultGetter("int32_t", &c, "AllocatedSize");
-      f.SetFlag(cpp::Function::kV8Inline);
-      f.PrintInlineDefinition(hdr_, [&](std::ostream& stream) {
+      allocated_size_f.SetFlag(cpp::Function::kV8Inline);
+      allocated_size_f.PrintInlineDefinition(hdr_, [&](std::ostream& stream) {
         stream << "    return SizeFor(";
         bool first = true;
         for (auto field : *index_fields) {
@@ -4173,7 +4188,18 @@ void CppClassGenerator::GenerateClassCasts() {
   });
 }
 
+SourcePosition CppClassGenerator::Position() { return type_->GetPosition(); }
+
 void CppClassGenerator::GenerateClassConstructors() {
+  const ClassType* typecheck_type = type_;
+  while (typecheck_type->IsShape()) {
+    typecheck_type = typecheck_type->GetSuperClass();
+
+    // Shapes have already been checked earlier to inherit from JSObject, so we
+    // should have found an appropriate type.
+    DCHECK(typecheck_type);
+  }
+
   hdr_ << " public:\n";
   hdr_ << "  template <class DAlias = D>\n";
   hdr_ << "  constexpr " << gen_name_ << "() : P() {\n";
@@ -4194,7 +4220,8 @@ void CppClassGenerator::GenerateClassConstructors() {
   inl_ << "template<class D, class P>\n";
   inl_ << "inline " << gen_name_T_ << "::" << gen_name_ << "(Address ptr)\n";
   inl_ << "  : P(ptr) {\n";
-  inl_ << "  SLOW_DCHECK(Is" << name_ << "_NonInline(*this));\n";
+  inl_ << "  SLOW_DCHECK(Is" << typecheck_type->name()
+       << "_NonInline(*this));\n";
   inl_ << "}\n";
 
   inl_ << "template<class D, class P>\n";
@@ -4204,7 +4231,7 @@ void CppClassGenerator::GenerateClassConstructors() {
   inl_ << "  SLOW_DCHECK("
        << "(allow_smi == HeapObject::AllowInlineSmiStorage::kAllowBeingASmi"
           " && this->IsSmi()) || Is"
-       << name_ << "_NonInline(*this));\n";
+       << typecheck_type->name() << "_NonInline(*this));\n";
   inl_ << "}\n";
 }
 
@@ -4601,14 +4628,18 @@ void ImplementationVisitor::GenerateClassDefinitions(
 
     // Emit forward declarations.
     for (const ClassType* type : TypeOracle::GetClasses()) {
+      CurrentSourcePosition::Scope position_activator(type->GetPosition());
       auto& streams = GlobalContext::GeneratedPerFile(type->AttributedToFile());
       std::ostream& header = streams.class_definition_headerfile;
-      header << "class " << type->GetGeneratedTNodeTypeName() << ";\n";
-      forward_declarations << "class " << type->GetGeneratedTNodeTypeName()
-                           << ";\n";
+      std::string name = type->GenerateCppClassDefinitions()
+                             ? type->name()
+                             : type->GetGeneratedTNodeTypeName();
+      header << "class " << name << ";\n";
+      forward_declarations << "class " << name << ";\n";
     }
 
     for (const ClassType* type : TypeOracle::GetClasses()) {
+      CurrentSourcePosition::Scope position_activator(type->GetPosition());
       auto& streams = GlobalContext::GeneratedPerFile(type->AttributedToFile());
       std::ostream& header = streams.class_definition_headerfile;
       std::ostream& inline_header = streams.class_definition_inline_headerfile;
@@ -4710,6 +4741,7 @@ void ImplementationVisitor::GenerateClassDefinitions(
     }
 
     for (const StructType* type : structs_used_in_classes) {
+      CurrentSourcePosition::Scope position_activator(type->GetPosition());
       std::ostream& header =
           GlobalContext::GeneratedPerFile(type->GetPosition().source)
               .class_definition_headerfile;
@@ -5274,6 +5306,7 @@ void ImplementationVisitor::GenerateExportedMacrosAssembler(
     for (auto& declarable : GlobalContext::AllDeclarables()) {
       TorqueMacro* macro = TorqueMacro::DynamicCast(declarable.get());
       if (!(macro && macro->IsExportedToCSA())) continue;
+      CurrentSourcePosition::Scope position_activator(macro->Position());
 
       cpp::Class assembler("TorqueGeneratedExportedMacrosAssembler");
       std::vector<std::string> generated_parameter_names;
@@ -5340,12 +5373,12 @@ void ImplementationVisitor::GenerateCSATypes(
       }
       h_contents << "\n  std::tuple<";
       bool first = true;
-      for (const Type* type : LowerType(struct_type)) {
+      for (const Type* lowered_type : LowerType(struct_type)) {
         if (!first) {
           h_contents << ", ";
         }
         first = false;
-        h_contents << type->GetGeneratedTypeName();
+        h_contents << lowered_type->GetGeneratedTypeName();
       }
       std::vector<std::string> all_fields;
       for (auto& field : struct_type->fields()) {

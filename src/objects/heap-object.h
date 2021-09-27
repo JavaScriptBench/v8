@@ -152,6 +152,7 @@ class HeapObject : public Object {
   // during marking GC.
   inline ObjectSlot RawField(int byte_offset) const;
   inline MaybeObjectSlot RawMaybeWeakField(int byte_offset) const;
+  inline CodeObjectSlot RawCodeField(int byte_offset) const;
 
   DECL_CAST(HeapObject)
 
@@ -195,7 +196,8 @@ class HeapObject : public Object {
   bool CanBeRehashed() const;
 
   // Rehash the object based on the layout inferred from its map.
-  void RehashBasedOnMap(Isolate* isolate);
+  template <typename IsolateT>
+  void RehashBasedOnMap(IsolateT* isolate);
 
   // Layout description.
 #define HEAP_OBJECT_FIELDS(V) \

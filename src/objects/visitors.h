@@ -110,6 +110,12 @@ class ObjectVisitor {
                              ObjectSlot end) = 0;
   virtual void VisitPointers(HeapObject host, MaybeObjectSlot start,
                              MaybeObjectSlot end) = 0;
+  // When V8_EXTERNAL_CODE_SPACE is enabled, visits a Code pointer slot.
+  // The values may be modified on return.
+  // Not used when V8_EXTERNAL_CODE_SPACE is not enabled (the Code pointer
+  // slots are visited as a part of on-heap slot visitation - via
+  // VisitPointers()).
+  virtual void VisitCodePointer(HeapObject host, CodeObjectSlot slot) = 0;
 
   // Custom weak pointers must be ignored by the GC but not other
   // visitors. They're used for e.g., lists that are recreated after GC. The
@@ -162,10 +168,48 @@ class ObjectVisitor {
   virtual void VisitOffHeapTarget(Code host, RelocInfo* rinfo) {}
 
   // Visits the relocation info using the given iterator.
-  virtual void VisitRelocInfo(RelocIterator* it);
+  void VisitRelocInfo(RelocIterator* it);
 
   // Visits the object's map pointer, decoding as necessary
   virtual void VisitMapPointer(HeapObject host) { UNREACHABLE(); }
+};
+
+// Helper version of ObjectVisitor that also takes care of caching base values
+// of the main pointer compression cage and for the code cage.
+class ObjectVisitorWithCageBases : public ObjectVisitor {
+ public:
+  inline ObjectVisitorWithCageBases(PtrComprCageBase cage_base,
+                                    PtrComprCageBase code_cage_base);
+  inline explicit ObjectVisitorWithCageBases(Isolate* isolate);
+  inline explicit ObjectVisitorWithCageBases(Heap* heap);
+
+  // The pointer compression cage base value used for decompression of all
+  // tagged values except references to Code objects.
+  PtrComprCageBase cage_base() const {
+#if V8_COMPRESS_POINTERS
+    return cage_base_;
+#else
+    return PtrComprCageBase{};
+#endif  // V8_COMPRESS_POINTERS
+  }
+
+  // The pointer compression cage base value used for decompression of
+  // references to Code objects.
+  PtrComprCageBase code_cage_base() const {
+#if V8_EXTERNAL_CODE_SPACE
+    return code_cage_base_;
+#else
+    return cage_base();
+#endif  // V8_EXTERNAL_CODE_SPACE
+  }
+
+ private:
+#if V8_COMPRESS_POINTERS
+  const PtrComprCageBase cage_base_;
+#ifdef V8_EXTERNAL_CODE_SPACE
+  const PtrComprCageBase code_cage_base_;
+#endif  // V8_EXTERNAL_CODE_SPACE
+#endif  // V8_COMPRESS_POINTERS
 };
 
 }  // namespace internal
