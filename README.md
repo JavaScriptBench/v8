@@ -1,6 +1,41 @@
 V8 JavaScript Engine
 =============
 
+
+
+==============================================================
+
+Just 
+
+```
+git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+cd depot_tools/
+export PATH=~/depot_tools:$PATH
+#vim ~/.bashrc
+
+mkdir chrome
+cd chrome
+fetch chromium
+gclient sync
+./build/install-build-deps.sh
+gclient sync
+
+cd ../..
+mkdir v8
+cd v8
+fetch v8
+
+
+```
+
+
+Ref:
+
+https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up
+
+
+==============================================================
+
 V8 is Google's open source JavaScript engine.
 
 V8 implements ECMAScript as specified in ECMA-262.
