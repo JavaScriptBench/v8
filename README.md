@@ -28,6 +28,7 @@ cd v8
 git pull && gclient sync
 tools/dev/gm.py x64.release
 tools/dev/gm.py x64.release.check
+~/v8/v8/out/x64.release/d8 test.js
 
 ```
 
