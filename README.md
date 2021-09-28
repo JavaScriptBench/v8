@@ -25,7 +25,9 @@ mkdir v8
 cd v8
 fetch v8
 cd v8
-
+git pull && gclient sync
+tools/dev/gm.py x64.release
+tools/dev/gm.py x64.release.check
 
 ```
 
@@ -33,6 +35,8 @@ cd v8
 Ref:
 
 https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up
+
+https://v8.dev/docs/build
 
 
 ==============================================================
