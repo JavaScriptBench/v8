@@ -24,6 +24,7 @@ cd ../..
 mkdir v8
 cd v8
 fetch v8
+cd v8
 
 
 ```
