@@ -8,7 +8,8 @@ V8 JavaScript Engine
 Just 
 
 ```
-git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git 
+// suggest get the working version from here https://github.com/JavaScriptBench/v8/releases/download/9.3.344/depot_tools-master.tar.gz
 cd depot_tools/
 export PATH=~/depot_tools:$PATH
 #vim ~/.bashrc
