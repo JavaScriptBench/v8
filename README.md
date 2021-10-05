@@ -18,6 +18,7 @@ mkdir chrome
 cd chrome
 fetch chromium
 gclient sync
+cd src
 ./build/install-build-deps.sh --no-chromeos-fonts
 gclient sync
 
