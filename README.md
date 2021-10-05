@@ -21,6 +21,7 @@ gclient sync
 ./build/install-build-deps.sh
 gclient sync
 
+
 cd ../..
 mkdir v8
 cd v8
@@ -31,6 +32,13 @@ tools/dev/gm.py x64.release
 tools/dev/gm.py x64.release.check
 ~/v8/v8/out/x64.release/d8 test.js
 
+```
+
+The other way:
+
+```
+# In this repo
+./install-build-deps.sh --no-chromeos-fonts
 ```
 
 
