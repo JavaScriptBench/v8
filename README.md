@@ -39,6 +39,9 @@ The other way:
 ```
 # In this repo
 ./install-build-deps.sh --no-chromeos-fonts
+tools/dev/gm.py x64.release
+tools/dev/gm.py x64.release.check
+~/v8/v8/out/x64.release/d8 test.js
 ```
 
 
