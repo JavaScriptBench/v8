@@ -293,10 +293,6 @@ declare_args() {
   # Enables additional heap verification phases and checks.
   cppgc_enable_verify_heap = ""
 
-  # Enable assignment checks for Members/Persistents during prefinalizer invocations.
-  # TODO(v8:11749): Enable by default after fixing any existing issues in Blink.
-  cppgc_enable_check_assignments_in_prefinalizers = false
-
   # Enable allocations during prefinalizer invocations.
   cppgc_allow_allocations_in_prefinalizers = false
 
@@ -789,10 +785,6 @@ config("features") {
 
   if (cppgc_enable_verify_heap) {
     defines += [ "CPPGC_VERIFY_HEAP" ]
-  }
-
-  if (cppgc_enable_check_assignments_in_prefinalizers) {
-    defines += [ "CPPGC_CHECK_ASSIGNMENTS_IN_PREFINALIZERS" ]
   }
 
   if (cppgc_allow_allocations_in_prefinalizers) {
@@ -1709,11 +1701,11 @@ template("run_torque") {
       "$destination_folder/exported-macros-assembler.h",
       "$destination_folder/factory.cc",
       "$destination_folder/factory.inc",
-      "$destination_folder/field-offsets.h",
       "$destination_folder/instance-types.h",
       "$destination_folder/interface-descriptors.inc",
       "$destination_folder/objects-body-descriptors-inl.inc",
       "$destination_folder/objects-printer.cc",
+      "$destination_folder/visitor-lists.h",
     ]
 
     foreach(file, torque_files) {
@@ -1783,15 +1775,6 @@ group("v8_maybe_icu") {
   }
 }
 
-group("v8_abseil") {
-  public_deps = [ "//third_party/abseil-cpp:absl" ]
-
-  public_configs = [
-    "//third_party/abseil-cpp:absl_define_config",
-    "//third_party/abseil-cpp:absl_include_config",
-  ]
-}
-
 v8_header_set("torque_runtime_support") {
   visibility = [ ":*" ]
 
@@ -1812,7 +1795,6 @@ v8_source_set("torque_generated_initializers") {
 
   public_deps = [
     ":torque_runtime_support",
-    ":v8_abseil",
     ":v8_maybe_icu",
   ]
 
@@ -1844,10 +1826,7 @@ v8_source_set("torque_generated_definitions") {
     ":v8_tracing",
   ]
 
-  public_deps = [
-    ":v8_abseil",
-    ":v8_maybe_icu",
-  ]
+  public_deps = [ ":v8_maybe_icu" ]
 
   sources = [
     "$target_gen_dir/torque-generated/class-forward-declarations.h",
@@ -2131,10 +2110,7 @@ v8_source_set("v8_snapshot") {
     # Also top-level visibility targets can depend on this.
     visibility += [ "//:gn_visibility" ]
 
-    public_deps += [
-      ":v8_abseil",
-      ":v8_maybe_icu",
-    ]
+    public_deps += [ ":v8_maybe_icu" ]
 
     sources += [ "$target_gen_dir/snapshot.cc" ]
   }
@@ -2312,10 +2288,7 @@ v8_source_set("v8_init") {
     "src/init/setup-isolate-full.cc",
   ]
 
-  public_deps = [
-    ":v8_abseil",
-    ":v8_maybe_icu",
-  ]
+  public_deps = [ ":v8_maybe_icu" ]
 
   configs = [ ":internal_config" ]
 }
@@ -3760,7 +3733,6 @@ v8_source_set("v8_compiler_opt") {
   public_deps = [
     ":generate_bytecode_builtins_list",
     ":run_torque",
-    ":v8_abseil",
     ":v8_maybe_icu",
     ":v8_tracing",
   ]
@@ -3793,7 +3765,6 @@ v8_source_set("v8_compiler") {
   public_deps = [
     ":generate_bytecode_builtins_list",
     ":run_torque",
-    ":v8_abseil",
     ":v8_internal_headers",
     ":v8_maybe_icu",
     ":v8_tracing",
@@ -4603,7 +4574,6 @@ v8_source_set("v8_base_without_compiler") {
     ":cppgc_base",
     ":generate_bytecode_builtins_list",
     ":run_torque",
-    ":v8_abseil",
     ":v8_headers",
     ":v8_internal_headers",
     ":v8_maybe_icu",
@@ -6133,10 +6103,7 @@ if (v8_enable_webassembly) {
       ":v8_tracing",
     ]
 
-    public_deps = [
-      ":v8_abseil",
-      ":v8_maybe_icu",
-    ]
+    public_deps = [ ":v8_maybe_icu" ]
 
     configs = [
       ":external_config",
@@ -6216,10 +6183,7 @@ if (v8_enable_webassembly) {
       ":wasm_test_common",
     ]
 
-    public_deps = [
-      ":v8_abseil",
-      ":v8_maybe_icu",
-    ]
+    public_deps = [ ":v8_maybe_icu" ]
 
     configs = [
       ":external_config",

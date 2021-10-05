@@ -335,6 +335,14 @@ struct FastApiTypedArray : public FastApiTypedArrayBase {
     return tmp;
   }
 
+  bool getStorageIfAligned(T** elements) const {
+    if (reinterpret_cast<uintptr_t>(data_) % alignof(T) != 0) {
+      return false;
+    }
+    *elements = reinterpret_cast<T*>(data_);
+    return true;
+  }
+
  private:
   // This pointer should include the typed array offset applied.
   // It's not guaranteed that it's aligned to sizeof(T), it's only
@@ -857,7 +865,7 @@ bool V8_EXPORT V8_WARN_UNUSED_RESULT TryToCopyAndConvertArrayToCppBuffer(
 
 template <>
 bool V8_EXPORT V8_WARN_UNUSED_RESULT TryToCopyAndConvertArrayToCppBuffer<
-    internal::CTypeInfoBuilder<uint32_t>::Build().GetId(), int32_t>(
+    internal::CTypeInfoBuilder<int32_t>::Build().GetId(), int32_t>(
     Local<Array> src, int32_t* dst, uint32_t max_length);
 
 template <>

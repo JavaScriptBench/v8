@@ -501,8 +501,8 @@ base::Optional<ParseResult> MakeAssertStatement(
   auto kind_string = child_results->NextAs<Identifier*>()->value;
   auto expr_with_source = child_results->NextAs<ExpressionWithSource>();
   AssertStatement::AssertKind kind;
-  if (kind_string == "assert") {
-    kind = AssertStatement::AssertKind::kAssert;
+  if (kind_string == "dcheck") {
+    kind = AssertStatement::AssertKind::kDcheck;
   } else if (kind_string == "check") {
     kind = AssertStatement::AssertKind::kCheck;
   } else if (kind_string == "static_assert") {
@@ -520,13 +520,6 @@ base::Optional<ParseResult> MakeDebugStatement(
   auto kind = child_results->NextAs<Identifier*>()->value;
   DCHECK(kind == "unreachable" || kind == "debug");
   Statement* result = MakeNode<DebugStatement>(kind, kind == "unreachable");
-  return ParseResult{result};
-}
-
-base::Optional<ParseResult> MakeVoidType(ParseResultIterator* child_results) {
-  TypeExpression* result = MakeNode<BasicTypeExpression>(
-      std::vector<std::string>{}, MakeNode<Identifier>("void"),
-      std::vector<TypeExpression*>{});
   return ParseResult{result};
 }
 
@@ -888,8 +881,7 @@ base::Optional<ParseResult> MakeClassDeclaration(
     ParseResultIterator* child_results) {
   AnnotationSet annotations(
       child_results,
-      {ANNOTATION_GENERATE_PRINT, ANNOTATION_NO_VERIFIER, ANNOTATION_ABSTRACT,
-       ANNOTATION_HAS_SAME_INSTANCE_TYPE_AS_PARENT,
+      {ANNOTATION_ABSTRACT, ANNOTATION_HAS_SAME_INSTANCE_TYPE_AS_PARENT,
        ANNOTATION_DO_NOT_GENERATE_CPP_CLASS, ANNOTATION_CUSTOM_CPP_CLASS,
        ANNOTATION_CUSTOM_MAP, ANNOTATION_GENERATE_BODY_DESCRIPTOR,
        ANNOTATION_EXPORT, ANNOTATION_DO_NOT_GENERATE_CAST,
@@ -898,10 +890,6 @@ base::Optional<ParseResult> MakeClassDeclaration(
       {ANNOTATION_RESERVE_BITS_IN_INSTANCE_TYPE,
        ANNOTATION_INSTANCE_TYPE_VALUE});
   ClassFlags flags = ClassFlag::kNone;
-  bool generate_print = annotations.Contains(ANNOTATION_GENERATE_PRINT);
-  if (generate_print) flags |= ClassFlag::kGeneratePrint;
-  bool generate_verify = !annotations.Contains(ANNOTATION_NO_VERIFIER);
-  if (generate_verify) flags |= ClassFlag::kGenerateVerify;
   if (annotations.Contains(ANNOTATION_ABSTRACT)) {
     flags |= ClassFlag::kAbstract;
   }
@@ -1971,11 +1959,9 @@ base::Optional<ParseResult> MakeAnnotation(ParseResultIterator* child_results) {
 base::Optional<ParseResult> MakeClassField(ParseResultIterator* child_results) {
   AnnotationSet annotations(
       child_results,
-      {ANNOTATION_NO_VERIFIER, ANNOTATION_CPP_RELAXED_STORE,
-       ANNOTATION_CPP_RELAXED_LOAD, ANNOTATION_CPP_RELEASE_STORE,
-       ANNOTATION_CPP_ACQUIRE_LOAD},
+      {ANNOTATION_CPP_RELAXED_STORE, ANNOTATION_CPP_RELAXED_LOAD,
+       ANNOTATION_CPP_RELEASE_STORE, ANNOTATION_CPP_ACQUIRE_LOAD},
       {ANNOTATION_IF, ANNOTATION_IFNOT});
-  bool generate_verify = !annotations.Contains(ANNOTATION_NO_VERIFIER);
   FieldSynchronization write_synchronization = FieldSynchronization::kNone;
   if (annotations.Contains(ANNOTATION_CPP_RELEASE_STORE)) {
     write_synchronization = FieldSynchronization::kAcquireRelease;
@@ -2027,7 +2013,6 @@ base::Optional<ParseResult> MakeClassField(ParseResultIterator* child_results) {
                                           std::move(conditions),
                                           weak,
                                           const_qualified,
-                                          generate_verify,
                                           read_synchronization,
                                           write_synchronization}};
 }
@@ -2276,10 +2261,6 @@ struct TorqueGrammar : Grammar {
       {&name,
        TryOrDefault<TypeList>(Sequence({Token("("), typeList, Token(")")}))},
       MakeLabelAndTypes)};
-
-  // Result: TypeExpression*
-  Symbol optionalReturnType = {Rule({Token(":"), &type}),
-                               Rule({}, MakeVoidType)};
 
   // Result: LabelAndTypesVector
   Symbol* optionalLabelList{TryOrDefault<LabelAndTypesVector>(
@@ -2561,7 +2542,7 @@ struct TorqueGrammar : Grammar {
           MakeTypeswitchStatement),
       Rule({Token("try"), &block, List<TryHandler*>(&tryHandler)},
            MakeTryLabelExpression),
-      Rule({OneOf({"assert", "check", "static_assert"}), Token("("),
+      Rule({OneOf({"dcheck", "check", "static_assert"}), Token("("),
             &expressionWithSource, Token(")"), Token(";")},
            MakeAssertStatement),
       Rule({Token("while"), Token("("), expression, Token(")"), &statement},
@@ -2588,7 +2569,7 @@ struct TorqueGrammar : Grammar {
   Symbol method = {Rule(
       {CheckIf(Token("transitioning")),
        Optional<std::string>(Sequence({Token("operator"), &externalString})),
-       Token("macro"), &name, &parameterListNoVararg, &optionalReturnType,
+       Token("macro"), &name, &parameterListNoVararg, Token(":"), &type,
        optionalLabelList, &block},
       MakeMethodDeclaration)};
 
@@ -2635,7 +2616,7 @@ struct TorqueGrammar : Grammar {
            AsSingletonVector<Declaration*, MakeTypeAliasDeclaration>()),
       Rule({Token("intrinsic"), &intrinsicName,
             TryOrDefault<GenericParameters>(&genericParameters),
-            &parameterListNoVararg, &optionalReturnType, &optionalBody},
+            &parameterListNoVararg, Token(":"), &type, &optionalBody},
            AsSingletonVector<Declaration*, MakeIntrinsicDeclaration>()),
       Rule({Token("extern"), CheckIf(Token("transitioning")),
             Optional<std::string>(
@@ -2643,33 +2624,33 @@ struct TorqueGrammar : Grammar {
             Token("macro"),
             Optional<std::string>(Sequence({&identifier, Token("::")})), &name,
             TryOrDefault<GenericParameters>(&genericParameters),
-            &typeListMaybeVarArgs, &optionalReturnType, optionalLabelList,
+            &typeListMaybeVarArgs, Token(":"), &type, optionalLabelList,
             Token(";")},
            AsSingletonVector<Declaration*, MakeExternalMacro>()),
       Rule({Token("extern"), CheckIf(Token("transitioning")),
             CheckIf(Token("javascript")), Token("builtin"), &name,
             TryOrDefault<GenericParameters>(&genericParameters),
-            &typeListMaybeVarArgs, &optionalReturnType, Token(";")},
+            &typeListMaybeVarArgs, Token(":"), &type, Token(";")},
            AsSingletonVector<Declaration*, MakeExternalBuiltin>()),
       Rule({Token("extern"), CheckIf(Token("transitioning")), Token("runtime"),
-            &name, &typeListMaybeVarArgs, &optionalReturnType, Token(";")},
+            &name, &typeListMaybeVarArgs, Token(":"), &type, Token(";")},
            AsSingletonVector<Declaration*, MakeExternalRuntime>()),
       Rule({annotations, CheckIf(Token("transitioning")),
             Optional<std::string>(
                 Sequence({Token("operator"), &externalString})),
             Token("macro"), &name,
             TryOrDefault<GenericParameters>(&genericParameters),
-            &parameterListNoVararg, &optionalReturnType, optionalLabelList,
+            &parameterListNoVararg, Token(":"), &type, optionalLabelList,
             &optionalBody},
            AsSingletonVector<Declaration*, MakeTorqueMacroDeclaration>()),
       Rule({CheckIf(Token("transitioning")), CheckIf(Token("javascript")),
             Token("builtin"), &name,
             TryOrDefault<GenericParameters>(&genericParameters),
-            &parameterListAllowVararg, &optionalReturnType, &optionalBody},
+            &parameterListAllowVararg, Token(":"), &type, &optionalBody},
            AsSingletonVector<Declaration*, MakeTorqueBuiltinDeclaration>()),
       Rule({CheckIf(Token("transitioning")), &name,
             &genericSpecializationTypeList, &parameterListAllowVararg,
-            &optionalReturnType, optionalLabelList, &block},
+            Token(":"), &type, optionalLabelList, &block},
            AsSingletonVector<Declaration*, MakeSpecializationDeclaration>()),
       Rule({Token("#include"), &externalString},
            AsSingletonVector<Declaration*, MakeCppIncludeDeclaration>()),

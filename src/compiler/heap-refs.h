@@ -603,7 +603,6 @@ class DescriptorArrayRef : public HeapObjectRef {
 
   PropertyDetails GetPropertyDetails(InternalIndex descriptor_index) const;
   NameRef GetPropertyKey(InternalIndex descriptor_index) const;
-  ObjectRef GetFieldType(InternalIndex descriptor_index) const;
   base::Optional<ObjectRef> GetStrongValue(
       InternalIndex descriptor_index) const;
 };
@@ -742,7 +741,6 @@ class V8_EXPORT_PRIVATE MapRef : public HeapObjectRef {
   PropertyDetails GetPropertyDetails(InternalIndex descriptor_index) const;
   NameRef GetPropertyKey(InternalIndex descriptor_index) const;
   FieldIndex GetFieldIndexFor(InternalIndex descriptor_index) const;
-  ObjectRef GetFieldType(InternalIndex descriptor_index) const;
   base::Optional<ObjectRef> GetStrongValue(
       InternalIndex descriptor_number) const;
 
@@ -868,8 +866,9 @@ class JSArrayRef : public JSObjectRef {
 
   // The `JSArray::length` property; not safe to use in general, but can be
   // used in some special cases that guarantee a valid `length` value despite
-  // concurrent reads.
-  ObjectRef length_unsafe() const;
+  // concurrent reads. The result needs to be optional in case the
+  // return value was created too recently to pass the gc predicate.
+  base::Optional<ObjectRef> length_unsafe() const;
 };
 
 class ScopeInfoRef : public HeapObjectRef {

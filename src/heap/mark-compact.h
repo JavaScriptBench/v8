@@ -377,11 +377,12 @@ class MainMarkingVisitor final
                      WeakObjects* weak_objects, Heap* heap,
                      unsigned mark_compact_epoch,
                      base::EnumSet<CodeFlushMode> code_flush_mode,
-                     bool embedder_tracing_enabled, bool is_forced_gc)
+                     bool embedder_tracing_enabled,
+                     bool should_keep_ages_unchanged)
       : MarkingVisitorBase<MainMarkingVisitor<MarkingState>, MarkingState>(
             kMainThreadTask, local_marking_worklists, weak_objects, heap,
             mark_compact_epoch, code_flush_mode, embedder_tracing_enabled,
-            is_forced_gc),
+            should_keep_ages_unchanged),
         marking_state_(marking_state),
         revisiting_object_(false) {}
 
@@ -585,7 +586,7 @@ class MarkCompactCollector final : public MarkCompactCollectorBase {
   // is drained until it is empty.
   template <MarkingWorklistProcessingMode mode =
                 MarkingWorklistProcessingMode::kDefault>
-  size_t ProcessMarkingWorklist(size_t bytes_to_process);
+  std::pair<size_t, size_t> ProcessMarkingWorklist(size_t bytes_to_process);
 
  private:
   void ComputeEvacuationHeuristics(size_t area_size,
@@ -631,8 +632,9 @@ class MarkCompactCollector final : public MarkCompactCollectorBase {
   bool ProcessEphemeron(HeapObject key, HeapObject value);
 
   // Marks ephemerons and drains marking worklist iteratively
-  // until a fixpoint is reached.
-  void ProcessEphemeronsUntilFixpoint();
+  // until a fixpoint is reached. Returns false if too many iterations have been
+  // tried and the linear approach should be used.
+  bool ProcessEphemeronsUntilFixpoint();
 
   // Drains ephemeron and marking worklists. Single iteration of the
   // fixpoint iteration.

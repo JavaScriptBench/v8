@@ -1684,6 +1684,8 @@ bool Heap::CollectGarbage(AllocationSpace space,
   is_current_gc_forced_ = gc_callback_flags & v8::kGCCallbackFlagForced ||
                           current_gc_flags_ & kForcedGC ||
                           force_gc_on_next_allocation_;
+  is_current_gc_for_heap_profiler_ =
+      gc_reason == GarbageCollectionReason::kHeapProfiler;
   if (force_gc_on_next_allocation_) force_gc_on_next_allocation_ = false;
 
   DevToolsTraceEventScope devtools_trace_event_scope(
@@ -1789,10 +1791,11 @@ bool Heap::CollectGarbage(AllocationSpace space,
         freed_global_handles +=
             PerformGarbageCollection(collector, gc_callback_flags);
       }
-      // Clear is_current_gc_forced now that the current GC is complete. Do this
-      // before GarbageCollectionEpilogue() since that could trigger another
-      // unforced GC.
+      // Clear flags describing the current GC now that the current GC is
+      // complete. Do this before GarbageCollectionEpilogue() since that could
+      // trigger another unforced GC.
       is_current_gc_forced_ = false;
+      is_current_gc_for_heap_profiler_ = false;
 
       {
         TRACE_GC(tracer(), GCTracer::Scope::HEAP_EXTERNAL_WEAK_GLOBAL_HANDLES);
@@ -7084,11 +7087,18 @@ void Heap::GenerationalBarrierSlow(HeapObject object, Address slot,
 
 void Heap::RecordEphemeronKeyWrite(EphemeronHashTable table, Address slot) {
   DCHECK(ObjectInYoungGeneration(HeapObjectSlot(slot).ToHeapObject()));
-  int slot_index = EphemeronHashTable::SlotToIndex(table.address(), slot);
-  InternalIndex entry = EphemeronHashTable::IndexToEntry(slot_index);
-  auto it =
-      ephemeron_remembered_set_.insert({table, std::unordered_set<int>()});
-  it.first->second.insert(entry.as_int());
+  if (FLAG_minor_mc) {
+    // Minor MC lacks support for specialized generational ephemeron barriers.
+    // The regular write barrier works as well but keeps more memory alive.
+    MemoryChunk* chunk = MemoryChunk::FromHeapObject(table);
+    RememberedSet<OLD_TO_NEW>::Insert<AccessMode::NON_ATOMIC>(chunk, slot);
+  } else {
+    int slot_index = EphemeronHashTable::SlotToIndex(table.address(), slot);
+    InternalIndex entry = EphemeronHashTable::IndexToEntry(slot_index);
+    auto it =
+        ephemeron_remembered_set_.insert({table, std::unordered_set<int>()});
+    it.first->second.insert(entry.as_int());
+  }
 }
 
 void Heap::EphemeronKeyWriteBarrierFromCode(Address raw_object,

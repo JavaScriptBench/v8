@@ -621,7 +621,8 @@ Maybe<bool> ValueSerializer::WriteJSObject(Handle<JSObject> object) {
 
     Handle<Object> value;
     if (V8_LIKELY(!map_changed)) map_changed = *map != object->map();
-    if (V8_LIKELY(!map_changed && details.location() == kField)) {
+    if (V8_LIKELY(!map_changed &&
+                  details.location() == PropertyLocation::kField)) {
       DCHECK_EQ(kData, details.kind());
       FieldIndex field_index = FieldIndex::ForDescriptor(*map, i);
       value = JSObject::FastPropertyAt(object, details.representation(),
@@ -805,8 +806,8 @@ Maybe<bool> ValueSerializer::WriteJSPrimitiveWrapper(
 
 void ValueSerializer::WriteJSRegExp(Handle<JSRegExp> regexp) {
   WriteTag(SerializationTag::kRegExp);
-  WriteString(handle(regexp->Pattern(), isolate_));
-  WriteVarint(static_cast<uint32_t>(regexp->GetFlags()));
+  WriteString(handle(regexp->source(), isolate_));
+  WriteVarint(static_cast<uint32_t>(regexp->flags()));
 }
 
 Maybe<bool> ValueSerializer::WriteJSMap(Handle<JSMap> map) {

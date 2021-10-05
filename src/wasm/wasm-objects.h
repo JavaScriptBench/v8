@@ -182,9 +182,6 @@ class WasmModuleObject
 class WasmTableObject
     : public TorqueGeneratedWasmTableObject<WasmTableObject, JSObject> {
  public:
-  // Dispatched behavior.
-  DECL_PRINTER(WasmTableObject)
-
   inline wasm::ValueType type();
 
   V8_EXPORT_PRIVATE static int Grow(Isolate* isolate,
@@ -266,9 +263,6 @@ class WasmMemoryObject
     : public TorqueGeneratedWasmMemoryObject<WasmMemoryObject, JSObject> {
  public:
   DECL_OPTIONAL_ACCESSORS(instances, WeakArrayList)
-
-  // Dispatched behavior.
-  DECL_PRINTER(WasmMemoryObject)
 
   // Add an instance to the internal (weak) list.
   V8_EXPORT_PRIVATE static void AddInstance(Isolate* isolate,
@@ -554,9 +548,6 @@ class V8_EXPORT_PRIVATE WasmInstanceObject : public JSObject {
 class WasmTagObject
     : public TorqueGeneratedWasmTagObject<WasmTagObject, JSObject> {
  public:
-  // Dispatched behavior.
-  DECL_PRINTER(WasmTagObject)
-
   // Checks whether the given {sig} has the same parameter types as the
   // serialized signature stored within this tag object.
   bool MatchesSignature(const wasm::FunctionSig* sig);
@@ -841,8 +832,6 @@ class WasmExceptionTag
   V8_EXPORT_PRIVATE static Handle<WasmExceptionTag> New(Isolate* isolate,
                                                         int index);
 
-  DECL_PRINTER(WasmExceptionTag)
-
   TQ_OBJECT_CONSTRUCTORS(WasmExceptionTag)
 };
 
@@ -936,7 +925,7 @@ class WasmArray : public TorqueGeneratedWasmArray<WasmArray, WasmObject> {
 
   // Get the {ObjectSlot} corresponding to the element at {index}. Requires that
   // this is a reference array.
-  ObjectSlot ElementSlot(uint32_t index);
+  inline ObjectSlot ElementSlot(uint32_t index);
   V8_EXPORT_PRIVATE wasm::WasmValue GetElement(uint32_t index);
 
   static inline int SizeFor(Map map, int length);
@@ -946,8 +935,9 @@ class WasmArray : public TorqueGeneratedWasmArray<WasmArray, WasmObject> {
                                           Handle<WasmArray> array,
                                           uint32_t index);
 
-  // Returns the Address of the element at {index}.
-  Address ElementAddress(uint32_t index);
+  // Returns the offset/Address of the element at {index}.
+  inline uint32_t element_offset(uint32_t index);
+  inline Address ElementAddress(uint32_t index);
 
   static int MaxLength(const wasm::ArrayType* type) {
     // The total object size must fit into a Smi, for filler objects. To make

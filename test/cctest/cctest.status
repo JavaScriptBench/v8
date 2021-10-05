@@ -382,6 +382,10 @@
   'test-serialize/StartupSerializerTwice': [SKIP],
   'test-serialize/StartupSerializerOnceRunScript': [SKIP],
   'test-serialize/StartupSerializerTwiceRunScript': [SKIP],
+
+  # The uint32 values are sign-extended on MIPS64.
+  'test-run-load-store/RunLoadStoreZeroExtend64': [SKIP],
+  'test-run-load-store/RunUnalignedLoadStoreZeroExtend64': [SKIP],
 }],  # 'arch == mips64el or arch == mips64'
 
 ##############################################################################
@@ -424,6 +428,7 @@
   'test-cpu-profiler/CrossScriptInliningCallerLineNumbers2': [SKIP],
 
   # SIMD not fully implemented yet.
+  'test-run-wasm-relaxed-simd/*': [SKIP],
   'test-run-wasm-simd/RunWasm_F64x2ExtractLaneWithI64x2_liftoff': [SKIP],
   'test-run-wasm-simd/RunWasm_I64x2ExtractWithF64x2_liftoff': [SKIP],
   'test-run-wasm-simd-liftoff/*': [SKIP],
@@ -441,6 +446,10 @@
   'test-liftoff-for-fuzzing/NondeterminismUnopF64x2OneNaN': [SKIP],
   'test-liftoff-for-fuzzing/NondeterminismUnopF32x4AllNaN': [SKIP],
   'test-liftoff-for-fuzzing/NondeterminismUnopF32x4OneNaN': [SKIP],
+
+  # riscv64 sign extend on uint32.
+  'test-run-load-store/RunUnalignedLoadStoreZeroExtend64': [SKIP],
+  'test-run-load-store/RunLoadStoreZeroExtend64': [SKIP],
 }],  # 'arch == riscv64'
 
 ##############################################################################
@@ -750,8 +759,9 @@
 
 ##############################################################################
 ['no_simd_hardware == True', {
-  'test-run-wasm-simd/*': [SKIP],
+  'test-run-wasm-relaxed-simd/*': [SKIP],
   'test-run-wasm-simd-liftoff/*': [SKIP],
+  'test-run-wasm-simd/*': [SKIP],
   'test-gc/RunWasmLiftoff_RefTrivialCasts': [SKIP],
   'test-gc/RunWasmTurbofan_RefTrivialCasts': [SKIP],
   'test-gc/RunWasmLiftoff_RefTrivialCastsStatic': [SKIP],

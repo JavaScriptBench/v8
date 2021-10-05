@@ -165,7 +165,6 @@ config_setting(
 # v8_control_flow_integrity
 # v8_enable_virtual_memory_cage
 # cppgc_enable_caged_heap
-# cppgc_enable_check_assignments_in_prefinalizers
 # cppgc_enable_object_names
 # cppgc_enable_verify_heap
 # cppgc_enable_young_generation
@@ -894,6 +893,8 @@ filegroup(
         "src/torque/instance-type-generator.cc",
         "src/torque/instructions.cc",
         "src/torque/instructions.h",
+        "src/torque/kythe-data.cc",
+        "src/torque/kythe-data.h",
         "src/torque/parameter-difference.h",
         "src/torque/server-data.cc",
         "src/torque/server-data.h",
@@ -2915,11 +2916,11 @@ v8_torque(
         "exported-macros-assembler.h",
         "factory.cc",
         "factory.inc",
-        "field-offsets.h",
         "instance-types.h",
         "interface-descriptors.inc",
         "objects-body-descriptors-inl.inc",
         "objects-printer.cc",
+        "visitor-lists.h",
     ],
     args = select({
         ":is_v8_annotate_torque_ir": [ "-annotate-ir" ],
@@ -3006,7 +3007,6 @@ v8_library(
         ":v8_shared_internal_headers",
         ":v8_libbase_files",
     ],
-    deps = [ "@com_google_absl//absl/types:optional" ],
 )
 
 v8_library(
@@ -3074,10 +3074,7 @@ v8_binary(
         "src/regexp/special-case.h",
         "src/regexp/gen-regexp-special-case.cc",
     ],
-    deps = [
-        "@icu",
-        "@com_google_absl//absl/types:optional",
-    ],
+    deps = [ "@icu" ],
 )
 
 v8_binary(

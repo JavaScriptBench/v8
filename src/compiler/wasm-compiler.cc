@@ -654,8 +654,9 @@ void WasmGraphBuilder::StackCheck(wasm::WasmCodePosition position) {
       mcgraph()->machine()->StackPointerGreaterThan(StackCheckKind::kWasm),
       limit, effect()));
 
-  Diamond stack_check(graph(), mcgraph()->common(), check, BranchHint::kTrue);
-  stack_check.Chain(control());
+  Node* if_true;
+  Node* if_false;
+  gasm_->Branch(check, &if_true, &if_false, BranchHint::kTrue);
 
   if (stack_check_call_operator_ == nullptr) {
     // Build and cache the stack check call operator and the constant
@@ -676,15 +677,18 @@ void WasmGraphBuilder::StackCheck(wasm::WasmCodePosition position) {
     stack_check_call_operator_ = mcgraph()->common()->Call(call_descriptor);
   }
 
-  Node* call = graph()->NewNode(stack_check_call_operator_.get(),
-                                stack_check_code_node_.get(), effect(),
-                                stack_check.if_false);
-
+  Node* call =
+      graph()->NewNode(stack_check_call_operator_.get(),
+                       stack_check_code_node_.get(), effect(), if_false);
   SetSourcePosition(call, position);
 
-  Node* ephi = stack_check.EffectPhi(effect(), call);
+  DCHECK_GT(call->op()->ControlOutputCount(), 0);
+  Node* merge = graph()->NewNode(mcgraph()->common()->Merge(2), if_true, call);
+  DCHECK_GT(call->op()->EffectOutputCount(), 0);
+  Node* ephi = graph()->NewNode(mcgraph()->common()->EffectPhi(2), effect(),
+                                call, merge);
 
-  SetEffectControl(ephi, stack_check.merge);
+  SetEffectControl(ephi, merge);
 }
 
 void WasmGraphBuilder::PatchInStackCheckIfNeeded() {
@@ -6009,6 +6013,11 @@ void WasmGraphBuilder::ArrayCopy(Node* dst_array, Node* dst_index,
   BoundsCheckArrayCopy(dst_array, dst_index, length, position);
   BoundsCheckArrayCopy(src_array, src_index, length, position);
 
+  auto skip = gasm_->MakeLabel();
+
+  gasm_->GotoIf(gasm_->WordEqual(length, Int32Constant(0)), &skip,
+                BranchHint::kFalse);
+
   Node* function =
       gasm_->ExternalConstant(ExternalReference::wasm_array_copy());
   MachineType arg_types[]{
@@ -6018,6 +6027,8 @@ void WasmGraphBuilder::ArrayCopy(Node* dst_array, Node* dst_index,
   MachineSignature sig(0, 6, arg_types);
   BuildCCall(&sig, function, GetInstance(), dst_array, dst_index, src_array,
              src_index, length);
+  gasm_->Goto(&skip);
+  gasm_->Bind(&skip);
 }
 
 // 1 bit V8 Smi tag, 31 bits V8 Smi shift, 1 bit i31ref high-bit truncation.
@@ -7851,10 +7862,9 @@ bool BuildGraphForWasmFunction(wasm::CompilationEnv* env,
   WasmGraphBuilder builder(env, mcgraph->zone(), mcgraph, func_body.sig,
                            source_positions);
   auto* allocator = wasm::GetWasmEngine()->allocator();
-  wasm::VoidResult graph_construction_result =
-      wasm::BuildTFGraph(allocator, env->enabled_features, env->module,
-                         &builder, detected, func_body, loop_infos,
-                         node_origins, func_index, wasm::kInstrumentEndpoints);
+  wasm::VoidResult graph_construction_result = wasm::BuildTFGraph(
+      allocator, env->enabled_features, env->module, &builder, detected,
+      func_body, loop_infos, node_origins, func_index, wasm::kRegularFunction);
   if (graph_construction_result.failed()) {
     if (FLAG_trace_wasm_compiler) {
       StdoutStream{} << "Compilation failed: "

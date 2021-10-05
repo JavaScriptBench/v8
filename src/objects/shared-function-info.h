@@ -22,7 +22,6 @@
 #include "src/roots/roots.h"
 #include "testing/gtest/include/gtest/gtest_prod.h"  // nogncheck
 #include "torque-generated/bit-fields.h"
-#include "torque-generated/field-offsets.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -146,8 +145,6 @@ class InterpreterData
     : public TorqueGeneratedInterpreterData<InterpreterData, Struct> {
  public:
   DECL_ACCESSORS(interpreter_trampoline, Code)
-
-  DECL_PRINTER(InterpreterData)
 
  private:
   DECL_ACCESSORS(raw_interpreter_trampoline, CodeT)

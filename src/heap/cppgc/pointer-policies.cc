@@ -30,7 +30,7 @@ bool IsOnStack(const void* address) {
 
 }  // namespace
 
-void EnabledCheckingPolicyBase::CheckPointerImpl(
+void SameThreadEnabledCheckingPolicyBase::CheckPointerImpl(
     const void* ptr, bool points_to_payload, bool check_off_heap_assignments) {
   // `ptr` must not reside on stack.
   DCHECK(!IsOnStack(ptr));
@@ -56,6 +56,8 @@ void EnabledCheckingPolicyBase::CheckPointerImpl(
   // Member references should never mix heaps.
   DCHECK_EQ(heap_, &base_page->heap());
 
+  DCHECK_EQ(heap_->GetCreationThreadId(), v8::base::OS::GetCurrentThreadId());
+
   // Header checks.
   const HeapObjectHeader* header = nullptr;
   if (points_to_payload) {
@@ -70,25 +72,24 @@ void EnabledCheckingPolicyBase::CheckPointerImpl(
     DCHECK(!header->IsFree());
   }
 
-#ifdef CPPGC_CHECK_ASSIGNMENTS_IN_PREFINALIZERS
+#ifdef CPPGC_VERIFY_HEAP
   if (check_off_heap_assignments || is_on_heap) {
     if (heap_->prefinalizer_handler()->IsInvokingPreFinalizers()) {
-      // During prefinalizers invocation, check that |ptr| refers to a live
-      // object and that it is assigned to a live slot.
-      DCHECK(header->IsMarked());
       // Slot can be in a large object.
       const auto* slot_page = BasePage::FromInnerAddress(heap_, this);
       // Off-heap slots (from other heaps or on-stack) are considered live.
       bool slot_is_live =
           !slot_page ||
           slot_page->ObjectHeaderFromInnerAddress(this).IsMarked();
-      DCHECK(slot_is_live);
+      // During prefinalizers invocation, check that if the slot is live then
+      // |ptr| refers to a live object.
+      DCHECK_IMPLIES(slot_is_live, header->IsMarked());
       USE(slot_is_live);
     }
   }
 #else
   USE(is_on_heap);
-#endif  // CPPGC_CHECK_ASSIGNMENTS_IN_PREFINALIZERS
+#endif  // CPPGC_VERIFY_HEAP
 }
 
 PersistentRegion& StrongPersistentPolicy::GetPersistentRegion(
