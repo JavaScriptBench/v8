@@ -28,7 +28,7 @@ mkdir v8
 cd v8
 fetch v8
 cd v8
-git checkout 9.3.344
+git checkout master
 git pull && gclient sync
 tools/dev/gm.py x64.release
 tools/dev/gm.py x64.release.check
